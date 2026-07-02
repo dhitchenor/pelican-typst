@@ -1,0 +1,88 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # Unit/regression test suite across every Python version the package
+  # claims to support. Installs via a REAL `pip install .` (not
+  # editable) on every run, which exercises the same namespace-package
+  # discovery path a real user hits -- a missing-subpackage packaging
+  # bug was actually caught this way during development, not by the
+  # tests themselves.
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install the package (real install, not editable)
+        run: python -m pip install .[test]
+
+      - name: Run the test suite
+        run: python -m pytest tests/ -v
+
+      - name: Confirm auto-discovery actually finds the plugin
+        run: |
+          python -c "
+          from pelican.plugins._utils import get_namespace_plugins
+          plugins = get_namespace_plugins()
+          assert 'pelican.plugins.typst' in plugins, f'auto-discovery failed: {plugins}'
+          print('auto-discovery OK:', list(plugins.keys()))
+          "
+
+  # A real end-to-end Pelican build using every example file, on top of
+  # the unit tests above. This is the level that actually caught the
+  # worst bug found during development (a leftover stash placeholder --
+  # a literal null byte -- broke RSS/Atom feed generation with an XML
+  # "control characters are not supported" error); pytest alone
+  # wouldn't necessarily have caught that class of problem, since it
+  # only shows up when Pelican's own feed generator gets involved.
+  build-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the plugin and Pelican
+        run: python -m pip install . pelican
+
+      - name: Build a test site from every example file
+        run: |
+          mkdir -p /tmp/site/content
+          cp examples/*.typ /tmp/site/content/
+          cat > /tmp/site/pelicanconf.py << 'EOF'
+          AUTHOR = "CI"
+          SITENAME = "CI Test Site"
+          SITEURL = ""
+          PATH = "content"
+          TIMEZONE = "UTC"
+          DEFAULT_LANG = "en"
+          PLUGINS = ["typst"]
+          EOF
+          cd /tmp/site
+          python -m pelican content -s pelicanconf.py -o output
+
+      - name: Confirm no leftover stash placeholders in generated output
+        run: |
+          if grep -rlP '\x00' /tmp/site/output/*.html; then
+            echo "Found a leftover unrestored stash placeholder (null byte) in generated HTML."
+            exit 1
+          fi
+          echo "Clean -- no leftover placeholders."

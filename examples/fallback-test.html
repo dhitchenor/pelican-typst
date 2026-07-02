@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>pelican_typst -- MathML/LaTeX fallback test</title>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<style>
+  body { font-family: sans-serif; max-width: 700px; margin: 2rem auto; line-height: 1.6; }
+  .eq-block { border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+  .label { color: #666; font-size: 0.85em; margin: 0 0 0.5rem 0; }
+  #controls { position: sticky; top: 0; background: #fff; padding: 0.75rem 0; border-bottom: 2px solid #333; }
+  #status { font-weight: bold; }
+  button { font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; }
+  .typst-math { font-size: 1.1em; }
+</style>
+</head>
+<body>
+
+<div id="controls">
+  <button onclick="toggleForce()">Toggle: force LaTeX fallback</button>
+  <span id="status"></span>
+</div>
+
+<h1>MathML / LaTeX fallback test</h1>
+<p>
+  With the toggle above <strong>off</strong>, your browser's native MathML
+  should render every equation below directly (no JS needed for that part).
+  Click <strong>Toggle: force LaTeX fallback</strong> to simulate a browser
+  that can't render MathML -- the script should hide the MathML and show
+  each equation re-rendered via KaTeX from the embedded LaTeX annotation
+  instead. If KaTeX weren't loaded on this page, you'd see the raw LaTeX
+  source as plain text -- try commenting out the KaTeX &lt;script&gt;/
+  &lt;link&gt; tags above to see that path too.
+</p>
+
+<div class="eq-block"><p class="label">Inline: x&sup2; + y&sup2; = z&sup2;</p><span class="typst-math" data-display="inline"><math xmlns="http://www.w3.org/1998/Math/MathML" display="inline"><semantics><mrow><msup><mrow><mi>x</mi></mrow><mrow><mn>2</mn></mrow></msup><mo>+</mo><msup><mrow><mi>y</mi></mrow><mrow><mn>2</mn></mrow></msup><mo>=</mo><msup><mrow><mi>z</mi></mrow><mrow><mn>2</mn></mrow></msup></mrow><annotation encoding="application/x-tex">x^{2} + y^{2} = z^{2}</annotation></semantics></math><span class="typst-math-fallback" aria-hidden="true" hidden>\(x^{2} + y^{2} = z^{2}\)</span></span></div>
+<div class="eq-block"><p class="label">Display: quadratic formula</p><span class="typst-math" data-display="block"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mfrac><mrow><mo>-</mo><mi>b</mi><mo>±</mo><msqrt><msup><mrow><mi>b</mi></mrow><mrow><mn>2</mn></mrow></msup><mo>-</mo><mn>4</mn><mi>a</mi><mi>c</mi></msqrt></mrow><mrow><mn>2</mn><mi>a</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">\frac{- b \pm \sqrt{b^{2} - 4 a c}}{2 a}</annotation></semantics></math><span class="typst-math-fallback" aria-hidden="true" hidden>\[\frac{- b \pm \sqrt{b^{2} - 4 a c}}{2 a}\]</span></span></div>
+<div class="eq-block"><p class="label">Display: sum of squares</p><span class="typst-math" data-display="block"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><munderover><mrow><mo>∑</mo></mrow><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mrow><mi>n</mi></mrow></munderover><msup><mrow><mi>i</mi></mrow><mrow><mn>2</mn></mrow></msup><mo>=</mo><mfrac><mrow><mi>n</mi><mo>(</mo><mi>n</mi><mo>+</mo><mn>1</mn><mo>)</mo><mrow><mo>(</mo><mn>2</mn><mi>n</mi><mo>+</mo><mn>1</mn><mo>)</mo></mrow></mrow><mrow><mn>6</mn></mrow></mfrac></mrow><annotation encoding="application/x-tex">\sum_{i = 1}^{n} i^{2} = \frac{\mathrm{n}(n + 1) \left( 2 n + 1 \right)}{6}</annotation></semantics></math><span class="typst-math-fallback" aria-hidden="true" hidden>\[\sum_{i = 1}^{n} i^{2} = \frac{\mathrm{n}(n + 1) \left( 2 n + 1 \right)}{6}\]</span></span></div>
+<div class="eq-block"><p class="label">Display: 2x2 matrix</p><span class="typst-math" data-display="block"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mrow><mo>(</mo><mtable><mtr><mtd><mrow><mn>1</mn></mrow></mtd><mtd><mrow><mn>2</mn></mrow></mtd></mtr><mtr><mtd><mrow><mn>3</mn></mrow></mtd><mtd><mrow><mn>4</mn></mrow></mtd></mtr></mtable><mo>)</mo></mrow></mrow><annotation encoding="application/x-tex">\begin{pmatrix}1 &amp; 2 \\ 3 &amp; 4\end{pmatrix}</annotation></semantics></math><span class="typst-math-fallback" aria-hidden="true" hidden>\[\begin{pmatrix}1 &amp; 2 \\ 3 &amp; 4\end{pmatrix}\]</span></span></div>
+
+<script>
+  var params = new URLSearchParams(window.location.search);
+  var forced = params.get('forcefallback') === '1';
+  window.FORCE_LATEX_FALLBACK = forced;
+  document.getElementById('status').textContent =
+    forced ? '(currently: fallback FORCED on)' : '(currently: native MathML, if supported)';
+
+  function toggleForce() {
+    var p = new URLSearchParams(window.location.search);
+    if (p.get('forcefallback') === '1') {
+      p.delete('forcefallback');
+    } else {
+      p.set('forcefallback', '1');
+    }
+    window.location.search = p.toString();
+  }
+</script>
+<script src="mathml-fallback.js"></script>
+</body>
+</html>

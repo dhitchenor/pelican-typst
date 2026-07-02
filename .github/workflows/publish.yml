@@ -1,0 +1,80 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+  workflow_dispatch: # lets you trigger it manually from the Actions tab too
+
+jobs:
+  # Tag pushes don't trigger tests.yml (that only watches branch pushes/PRs),
+  # so this workflow needs its own test gate -- never publish a version that
+  # doesn't pass the suite, even if the tag push itself looks fine.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the package and test dependencies
+        run: python -m pip install .[test]
+      - name: Run the test suite
+        run: python -m pytest tests/ -v
+
+  build:
+    name: Build distribution
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade build
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Validate the built distributions
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine check dist/*
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    # The environment name here must match one you create in this repo's
+    # Settings -> Environments (name it exactly "pypi"), AND match the
+    # environment name you enter when configuring the Trusted Publisher on
+    # PyPI's side. See the setup steps in CONTRIBUTING.md.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pelican-typst
+    permissions:
+      id-token:
+        write # REQUIRED -- this is the actual trusted-publishing
+        # mechanism. No token or secret anywhere in this
+        # file; GitHub mints a short-lived OIDC identity
+        # here and PyPI verifies it against the trusted
+        # publisher config instead.
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

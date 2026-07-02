@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pelican-typst"
+version = "1.0.1"
+description = "Pelican reader plugin: convert Typst (.typ) source files into HTML, with MathML + LaTeX-fallback math rendering."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Dale Hitchenor" }]
+keywords = ["pelican", "plugin", "typst", "mathml", "latex"]
+classifiers = [
+    "Framework :: Pelican",
+    "Framework :: Pelican :: Plugins",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+]
+dependencies = [
+    "pelican>=4.5",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[project.urls]
+Homepage = "https://github.com/dhitchenor/pelican-typst"
+
+# --- Namespace package discovery -------------------------------------------
+# `pelican` and `pelican.plugins` deliberately have NO __init__.py anywhere
+# in this distribution -- that's what lets multiple separately-installed
+# plugins (this one, sitemap, etc.) all live under the shared
+# `pelican.plugins.*` namespace. `namespaces = true` tells setuptools to
+# package it that way (PEP 420 implicit namespace packages) instead of
+# trying to find (and failing to find) an __init__.py at those levels.
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pelican.plugins.typst", "pelican.plugins.typst.*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+"pelican.plugins.typst" = ["static/*.js", "data/*.txt"]
