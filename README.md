@@ -64,8 +64,8 @@ at PyPI or a source tree at all (e.g. an offline/air-gapped install):
 
 ```bash
 pip install build
-python -m build            # produces dist/pelican_typst-1.0.1-py3-none-any.whl
-pip install dist/pelican_typst-1.0.1-py3-none-any.whl
+python -m build            # produces dist/pelican_typst-<version_number>-py3-none-any.whl
+pip install dist/pelican_typst-<version_number>-py3-none-any.whl
 ```
 
 </details>
@@ -618,7 +618,7 @@ middle of an article:
   math.equation(numbering:)`, etc. A `#set` rule never produces visible
   output in real Typst either, so stripping is strictly correct, not a
   compromise. Multi-line, same as `#set page(...)`.
-- **`#import "file.typ": *`** and **`#import "@preview/pkg:1.0.1": ...`**
+- **`#import "file.typ": *`** and **`#import "@preview/pkg:<version_number>": ...`**
   -- common in real templated documents, never visible either way.
 - **`#bibliography(...)`** and **`#cite(<key>)`** -- since bibliographies
   aren't implemented (see below), showing the raw call would be

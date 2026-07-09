@@ -3,6 +3,70 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+
+## [1.0.2] - 2026-07-09
+
+### Fixed
+
+- **Crash (`IndexError`) when an inline styling call (e.g. `#text(...)[...]`)
+  was nested inside a layout wrap (`#align`, `#block`, `#box`, `#pad`,
+  `#move`, `#place`, `#rotate`, `#scale`, `#skew`, `#columns`, `#hide`,
+  `#repeat`).** `_inline()` ran `_process_bracket_functions` and
+  `_process_text_style` *before* `_process_layout_wraps`, so any inline
+  call textually nested inside a layout wrap's `[...]` content got
+  stashed into the *outer* call's placeholder list first. When the
+  layout-wrap processor then extracted that (already partially
+  processed) content and recursively called `_inline()` on it, the
+  recursive call started a fresh, empty placeholder list and could not
+  resolve the leftover placeholder markers left behind by the outer
+  call, raising `IndexError: list index out of range` in `restore()`.
+  Fixed by running `_process_layout_wraps` first in the `_inline()`
+  pipeline, so nested content stays as raw Typst source until its own
+  independent recursive call fully resolves it.
+
+  Example that previously crashed the build:
+  ```typst
+  #align(center)[
+    #text(size: 22pt, weight: "bold")[Some title]
+    #text(size: 10pt, fill: gray)[Some subtitle]
+  ]
+  ```
+
+- **Multi-line bullet (`-`) and numbered (`+`) list items were split
+  into separate single-item lists instead of one grouped `<ul>`/`<ol>`.**
+  The list-collection loop in `convert()` only recognised a line as
+  part of the current item if that exact physical line itself started
+  with the `-`/`+` marker. A list item's wrapped continuation line
+  (any real Typst list item long enough to span multiple lines) didn't
+  match, silently ending the list early; the continuation text then
+  fell through to the generic paragraph handler and rendered as a
+  stray `<p>` between list fragments. The next `-`/`+` line started a
+  *new* single-item list, which is why rendered numbered lists always
+  showed "1." for every entry instead of incrementing, each item was
+  its own separate one-item `<ol>`, not a numbering defect. Fixed by
+  having each item absorb subsequent non-blank lines that aren't
+  themselves a new marker or another block-start (heading, fence,
+  etc.), same continuation logic already used by paragraph handling.
+
+  Example that previously rendered as three separate lists with stray
+  paragraphs in between:
+  ```typst
+  + *First item.* This is a longer explanation that
+    wraps onto a second physical line.
+  + *Second item.* Also wraps onto
+    another line here.
+  ```
+
+### Testing
+
+- Added regression tests covering both fixes (nested inline-style-in-
+  layout-wrap; multi-line bullet and numbered list items), following
+  the existing convention of pinning real bugs found during development
+  in place as regressions.
+- Re-verified all 9 bundled `examples/*.typ` files convert without
+  errors or leftover stash placeholders.
+
+
 ## [1.0.1] - 2026-07-04
 
 Initial release.

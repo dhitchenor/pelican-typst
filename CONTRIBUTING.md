@@ -112,8 +112,8 @@ locally.
 
 ```bash
 # bump version in pyproject.toml, update CHANGELOG.md, commit
-git tag 1.0.1
-git push origin 1.0.1
+git tag <version_number>
+git push origin <version_number>
 ```
 
 That's it -- the tag push triggers the workflow, which tests, builds,

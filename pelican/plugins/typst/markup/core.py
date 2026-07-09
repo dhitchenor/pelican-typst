@@ -199,8 +199,17 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
             if _BULLET_RE.match(line):
                 items = []
                 while i < n and (bullet_match := _BULLET_RE.match(lines[i])):
-                    items.append(bullet_match.group(1))
+                    item_lines = [bullet_match.group(1)]
                     i += 1
+                    while (
+                        i < n
+                        and lines[i].strip() != ""
+                        and not _BULLET_RE.match(lines[i])
+                        and not _looks_like_block_start(lines[i])
+                    ):
+                        item_lines.append(lines[i])
+                        i += 1
+                    items.append(_join_with_linebreaks(item_lines))
                 out.append(
                     "<ul>"
                     + "".join(f"<li>{self._inline(it)}</li>" for it in items)
@@ -211,8 +220,17 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
             if _NUMBERED_RE.match(line):
                 items = []
                 while i < n and (numbered_match := _NUMBERED_RE.match(lines[i])):
-                    items.append(numbered_match.group(1))
+                    item_lines = [numbered_match.group(1)]
                     i += 1
+                    while (
+                        i < n
+                        and lines[i].strip() != ""
+                        and not _NUMBERED_RE.match(lines[i])
+                        and not _looks_like_block_start(lines[i])
+                    ):
+                        item_lines.append(lines[i])
+                        i += 1
+                    items.append(_join_with_linebreaks(item_lines))
                 out.append(
                     "<ol>"
                     + "".join(f"<li>{self._inline(it)}</li>" for it in items)
@@ -338,9 +356,9 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
             placeholders.append(rendered)
             return _PLACEHOLDER.format(len(placeholders) - 1)
 
+        text = self._process_layout_wraps(text, stash)
         text = self._process_bracket_functions(text, stash)
         text = self._process_text_style(text, stash)
-        text = self._process_layout_wraps(text, stash)
         text = self._process_math_equation(text, stash)
 
         def numbering_sub(m):
