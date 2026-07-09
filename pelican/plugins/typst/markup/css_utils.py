@@ -38,6 +38,25 @@ def _parse_size(value):
     return None
 
 
+def _parse_stroke(value):
+    """Parse a Typst stroke value, e.g. `0.5pt + gray`, `1pt`, or `red`,
+    into a CSS border spec like "0.5pt solid gray". Falls back to
+    sensible defaults for whichever half (width/color) isn't present or
+    isn't recognised."""
+    parts = [p.strip() for p in _split_top_level(value, "+")]
+    width = None
+    color = None
+    for p in parts:
+        size = _parse_size(p)
+        if size:
+            width = size
+            continue
+        c = _parse_color(p)
+        if c:
+            color = c
+    return f"{width or '1pt'} solid {color or 'currentColor'}"
+
+
 def _map_weight(value):
     v = value.strip().strip('"')
     if v in _WEIGHT_MAP:

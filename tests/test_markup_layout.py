@@ -102,3 +102,36 @@ class TestSpacers:
     def test_v_is_block_level(self, converter):
         out = converter.convert("Above\n\n#v(2cm)\n\nBelow")
         assert '<div style="height:2cm;"></div>' in out
+
+
+class TestLine:
+    def test_renders_as_hr_not_literal_text(self, converter):
+        # Regression: #line(...) previously fell through to the generic
+        # paragraph handler and rendered as literal, unprocessed text
+        # (e.g. "<p>#line(length: 100%, stroke: 0.5pt + gray)</p>").
+        out = converter.convert("#line(length: 100%, stroke: 0.5pt + gray)")
+        assert "<hr" in out
+        assert "#line(" not in out
+
+    def test_length_sets_width(self, converter):
+        out = converter.convert("#line(length: 50%)")
+        assert "width:50%" in out
+
+    def test_stroke_width_and_color_both_applied(self, converter):
+        out = converter.convert("#line(stroke: 0.5pt + gray)")
+        assert "0.5pt" in out
+        assert "gray" in out
+
+    def test_no_args_falls_back_to_sensible_defaults(self, converter):
+        out = converter.convert("#line()")
+        assert "<hr" in out
+        assert "width:100%" in out
+
+    def test_does_not_swallow_surrounding_paragraphs(self, converter):
+        # Regression: #line(...) must be recognised as its own block
+        # (registered in _BLOCK_START_RES) so it doesn't get absorbed
+        # into a preceding/following paragraph's continuation lines.
+        out = converter.convert("Above\n\n#line(length: 100%)\n\nBelow")
+        assert "<p>Above</p>" in out
+        assert "<p>Below</p>" in out
+        assert "<hr" in out

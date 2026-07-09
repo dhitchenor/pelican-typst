@@ -18,7 +18,7 @@ import re
 
 from ..math import convert_math
 from .block_renderers import BlockRenderersMixin
-from .css_utils import _parse_size
+from .css_utils import _parse_size, _parse_stroke
 from .inline_processors import InlineProcessorsMixin
 from .lorem import _generate_lorem
 from .numbering import _apply_numbering
@@ -42,6 +42,7 @@ from .patterns import (
     _LABEL_SUFFIX_RE,
     _LET_ANY_RE,
     _LET_LITERAL_RE,
+    _LINE_FUNC_RE,
     _LOREM_RE,
     _NUMBERED_RE,
     _NUMBERING_RE,
@@ -170,6 +171,25 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
                 size = _parse_size(m.group(1).strip())
                 if size:
                     out.append(f'<div style="height:{size};"></div>')
+                i += 1
+                continue
+
+            m = _LINE_FUNC_RE.match(line.strip())
+            if m:
+                named = {}
+                for part in _split_top_level(m.group(1), ",") if m.group(1) else []:
+                    p = part.strip()
+                    if not p:
+                        continue
+                    km = re.match(r"^([a-zA-Z-]+)\s*:\s*(.+)$", p, re.DOTALL)
+                    if km:
+                        named[km.group(1)] = km.group(2).strip()
+                length = _parse_size(named.get("length", "100%")) or "100%"
+                border = _parse_stroke(named["stroke"]) if "stroke" in named else "1pt solid currentColor"
+                out.append(
+                    f'<hr style="width:{length}; border:none; '
+                    f'border-top:{border}; margin:1em 0;">'
+                )
                 i += 1
                 continue
 

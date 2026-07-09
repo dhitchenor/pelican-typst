@@ -4,6 +4,35 @@ All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
 
+## [1.0.3] - 2026-07-XX
+
+### Added
+
+- **`#line(...)` now renders as an `<hr>` instead of falling through as
+  literal, unprocessed text.** Previously there was no handling for this
+  function at all, so something like:
+  ```typst
+  #line(length: 100%, stroke: 0.5pt + gray)
+  ```
+  would render as a stray paragraph containing the raw Typst source
+  (`<p>#line(length: 100%, stroke: 0.5pt + gray)</p>`) instead of a
+  horizontal rule. `length` maps to the `<hr>`'s width; `stroke` (a
+  Typst `width + color` value, e.g. `0.5pt + gray`) maps to
+  `border-top`. Both are optional, falling back to `100%` width and a
+  `1pt solid currentColor` border when omitted. Registered as a proper
+  block-start marker, so it's also correctly recognised standing on its
+  own between paragraphs rather than being absorbed into a preceding or
+  following paragraph's continuation lines.
+
+### Testing
+
+- Added a `TestLine` class in `test_markup_layout.py` covering: renders
+  as `<hr>` rather than literal text, `length` sets width, `stroke`
+  width/color are both applied, sensible defaults when called with no
+  arguments, and correct block-boundary behaviour alongside surrounding
+  paragraphs.
+
+
 ## [1.0.2] - 2026-07-09
 
 ### Fixed

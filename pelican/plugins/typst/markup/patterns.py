@@ -24,6 +24,7 @@ _BIBLIOGRAPHY_START_RE = re.compile(r"^#bibliography\(")
 _PAGEBREAK_RE = re.compile(r"^#pagebreak\([^)]*\)\s*$")
 _COLBREAK_RE = re.compile(r"^#colbreak\([^)]*\)\s*$")
 _V_FUNC_RE = re.compile(r"^#v\(\s*([^)]+?)\s*\)\s*$")
+_LINE_FUNC_RE = re.compile(r"^#line\(([^)]*)\)\s*$")
 _TERMS_RE = re.compile(r"^/\s+(.*)$")
 _SET_HEADING_NUMBERING_RE = re.compile(
     r'^#set\s+heading\(\s*numbering:\s*("(?:[^"\\]|\\.)*"|none)\s*\)\s*$'
@@ -37,7 +38,7 @@ _BLOCK_START_RES = [_HEADING_RE, _BULLET_RE, _NUMBERED_RE, _FENCE_RE,
                      _QUOTE_START_RE, _FIGURE_START_RE, _IMAGE_START_RE,
                      _TABLE_START_RE, _GRID_START_RE, _STACK_START_RE,
                      _SET_ANY_START_RE, _IMPORT_START_RE, _BIBLIOGRAPHY_START_RE,
-                     _PAGEBREAK_RE, _COLBREAK_RE, _V_FUNC_RE, _TERMS_RE,
+                     _PAGEBREAK_RE, _COLBREAK_RE, _V_FUNC_RE, _LINE_FUNC_RE, _TERMS_RE,
                      _SET_HEADING_NUMBERING_RE, _OUTLINE_RE, _LET_ANY_RE]
 
 _TABLE_HEADER_RE = re.compile(r"^table\.header\((.*)\)$", re.DOTALL)
