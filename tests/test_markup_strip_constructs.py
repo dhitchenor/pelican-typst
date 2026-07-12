@@ -33,16 +33,81 @@ class TestImportAndBibliography:
         assert "#import" not in out
         assert "<p>Real content.</p>" == out
 
-    def test_bibliography_call_produces_no_output(self, converter):
+    def test_bibliography_file_path_call_produces_no_output(self, converter):
+        # A real Typst file-path call, e.g. #bibliography("refs.bib") --
+        # not something we can resolve/parse (that's the later BibTeX
+        # import work), so it's silently consumed same as before,
+        # rather than leaking broken text.
         out = converter.convert('Before.\n\n#bibliography("refs.bib")\n\nAfter.')
         assert "#bibliography" not in out
         assert "<p>Before.</p>" in out
         assert "<p>After.</p>" in out
 
-    def test_cite_stripped_inline(self, converter):
-        out = converter.convert("Claim #cite(<smith2020>) here.")
-        assert "#cite" not in out
-        assert "smith2020" not in out
+
+class TestInlineBibliography:
+    """#bibliography((key: "entry", ...)) -- our own inline-dict
+    stepping stone ahead of real BibTeX/Hayagriva file support: authors
+    hand-write entries directly in the .typ file, #cite(<key>) links to
+    them, and a References section renders at the end listing only
+    what was actually cited, in citation order."""
+
+    def test_cite_renders_numbered_link_not_stripped(self, converter):
+        out = converter.convert(
+            'Claim #cite(<smith2020>) here.\n\n'
+            '#bibliography((smith2020: "Smith, J. (2020). A Paper."))'
+        )
+        assert "[1]" in out
+        assert 'href="#cite-1"' in out
+        assert "#cite(" not in out
+
+    def test_references_section_lists_only_cited_entries(self, converter):
+        out = converter.convert(
+            "Only this one is cited #cite(<used>).\n\n"
+            '#bibliography((\n'
+            '  used: "Used Entry.",\n'
+            '  unused: "Never Cited Entry.",\n'
+            "))"
+        )
+        assert "Used Entry." in out
+        assert "Never Cited Entry." not in out
+        assert '<h2>References</h2>' in out
+
+    def test_citation_order_not_bibliography_order_determines_numbering(self, converter):
+        # bib dict lists "b" first, but "a" is cited first in the body
+        # -- numbering must follow citation order, not dict order.
+        out = converter.convert(
+            "First #cite(<a>), then #cite(<b>).\n\n"
+            '#bibliography((\n'
+            '  b: "Entry B.",\n'
+            '  a: "Entry A.",\n'
+            "))"
+        )
+        assert out.index("[1]") < out.index("[2]")
+        assert out.index('id="cite-1"') < out.index('id="cite-2"')
+        assert "Entry A." in out.split('id="cite-1"')[1].split("</li>")[0]
+
+    def test_same_key_cited_twice_reuses_number_no_duplicate_id(self, converter):
+        out = converter.convert(
+            "Cited once #cite(<x>), cited again #cite(<x>).\n\n"
+            '#bibliography((x: "Entry X."))'
+        )
+        assert out.count("[1]") == 2
+        assert out.count('id="cite-ref-1"') == 1  # only first occurrence
+        assert out.count('id="cite-1"') == 1  # exactly one reference entry
+
+    def test_unresolved_citation_key_gets_graceful_fallback(self, converter):
+        # No matching #bibliography entry at all -- must not crash or
+        # silently vanish; shows the reader something diagnosable.
+        out = converter.convert("Dangling claim #cite(<missing>).")
+        assert "[1]" in out
+        assert "missing" in out
+
+    def test_no_citations_means_no_references_section(self, converter):
+        out = converter.convert(
+            'Nothing cited here.\n\n#bibliography((x: "Entry X."))'
+        )
+        assert "References" not in out
+        assert "Entry X." not in out
 
 
 class TestPagebreakAndColbreak:

@@ -55,7 +55,7 @@ _H_FUNC_RE = re.compile(r"#h\(\s*([^)]+?)\s*\)")
 _PAGEBREAK_INLINE_RE = re.compile(r"#pagebreak\([^)]*\)")
 _COLBREAK_INLINE_RE = re.compile(r"#colbreak\([^)]*\)")
 _LOREM_RE = re.compile(r"#lorem\(\s*(\d+)\s*\)")
-_CITE_INLINE_RE = re.compile(r"#cite\([^)]*\)")
+_CITE_INLINE_RE = re.compile(r"#cite\(\s*<([A-Za-z][\w.:-]*)>\s*\)")
 _HASH_REF_RE = re.compile(r"#([A-Za-z_]\w*)\b(?![(\[])")
 
 # --- Placeholders used by the stash/restore mechanism in _inline() -----

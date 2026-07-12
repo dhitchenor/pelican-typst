@@ -17,6 +17,7 @@ import html
 import re
 
 from ..math import convert_math
+from ..metadata import _parse_value
 from .block_renderers import BlockRenderersMixin
 from .css_utils import _parse_size, _parse_stroke
 from .inline_processors import InlineProcessorsMixin
@@ -79,6 +80,10 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
         self.label_map = {}
         self._heading_entry_idx = 0
         self.let_bindings = {}
+        self.bibliography = {}
+        self.citation_order = []
+        self.citation_index = {}
+        self.citation_first_seen = set()
 
     def convert(self, text):
         self.footnotes = []
@@ -86,6 +91,10 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
         self.heading_numbering_pattern = None
         self._heading_entry_idx = 0
         self.let_bindings = {}
+        self.bibliography = {}
+        self.citation_order = []
+        self.citation_index = {}
+        self.citation_first_seen = set()
 
         text = _strip_comments(text)
         self.heading_entries, self.label_map = self._collect_headings(text)
@@ -140,9 +149,24 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
                 continue
 
             if _BIBLIOGRAPHY_START_RE.match(line.strip()):
-                _args, consumed = self._scan_multiline_paren_call(
+                args, consumed = self._scan_multiline_paren_call(
                     lines, i, "#bibliography("
                 )
+                try:
+                    data, _ = _parse_value(args, 0)
+                    if isinstance(data, dict):
+                        self.bibliography.update(
+                            {
+                                str(k): html.escape(str(v), quote=False)
+                                for k, v in data.items()
+                            }
+                        )
+                except (ValueError, IndexError):
+                    # Not an inline dict (e.g. a real Typst file-path
+                    # call like #bibliography("refs.bib")) -- silently
+                    # consumed either way, same as before this supported
+                    # inline entries at all.
+                    pass
                 i += consumed
                 continue
 
@@ -367,6 +391,20 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
                 f"<ol>\n{items}\n</ol>\n</section>"
             )
 
+        if self.citation_order:
+            ref_items = []
+            for key in self.citation_order:
+                num = self.citation_index[key]
+                entry = self.bibliography.get(
+                    key, f"[unresolved citation key: {html.escape(key)}]"
+                )
+                ref_items.append(f'<li id="cite-{num}">{entry}</li>')
+            body += (
+                '\n<section class="references" role="doc-bibliography">\n'
+                "<h2>References</h2>\n"
+                f"<ol>\n{chr(10).join(ref_items)}\n</ol>\n</section>"
+            )
+
         return body
 
     def _inline(self, text):
@@ -375,6 +413,18 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
         def stash(rendered):
             placeholders.append(rendered)
             return _PLACEHOLDER.format(len(placeholders) - 1)
+
+        # Verbatim/code content must be protected before ANY other pass
+        # scans the text -- otherwise something like `#align(x)[y]`
+        # sitting inertly inside a code span or #raw() gets misread as a
+        # real layout wrap (or bracket function, etc.) by a later pass,
+        # corrupting the span instead of leaving it as literal text.
+        text = self._process_raw_func(text, stash)
+
+        def code_sub(m):
+            return stash(f"<code>{html.escape(m.group(1))}</code>")
+
+        text = re.sub(r"`([^`]+)`", code_sub, text)
 
         text = self._process_layout_wraps(text, stash)
         text = self._process_bracket_functions(text, stash)
@@ -395,9 +445,24 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
 
         text = _LOREM_RE.sub(lorem_sub, text)
 
-        # #cite(<key>) -- we don't implement bibliographies, so showing
-        # the raw call would be strictly worse than hiding it.
-        text = _CITE_INLINE_RE.sub(lambda m: stash(""), text)
+        def cite_sub(m):
+            key = m.group(1)
+            if key not in self.citation_index:
+                self.citation_index[key] = len(self.citation_order) + 1
+                self.citation_order.append(key)
+            num = self.citation_index[key]
+            if key not in self.citation_first_seen:
+                self.citation_first_seen.add(key)
+                id_attr = f' id="cite-ref-{num}"'
+            else:
+                # Same source cited again elsewhere -- still gets the
+                # same [num] link, but only the first occurrence owns
+                # the backlink anchor id, so a source cited more than
+                # once doesn't produce duplicate HTML ids.
+                id_attr = ""
+            return stash(f'<sup{id_attr}><a href="#cite-{num}">[{num}]</a></sup>')
+
+        text = _CITE_INLINE_RE.sub(cite_sub, text)
 
         def hash_ref_sub(m):
             name = m.group(1)
@@ -439,13 +504,6 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
             )  # e.g. fr-unit spacing -- no clean equivalent, drop silently
 
         text = _H_FUNC_RE.sub(h_sub, text)
-
-        text = self._process_raw_func(text, stash)
-
-        def code_sub(m):
-            return stash(f"<code>{html.escape(m.group(1))}</code>")
-
-        text = re.sub(r"`([^`]+)`", code_sub, text)
 
         def math_sub(m):
             inner = m.group(1)

@@ -4,7 +4,53 @@ All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
 
-## [1.0.3] - 2026-07-XX
+## [1.0.4] - 2026-07-12
+
+### Added
+
+- **`#bibliography((key: "entry", ...))` and `#cite(<key>)`** -- a
+  self-contained, hand-written stepping stone ahead of real external
+  BibTeX/Hayagriva file support (planned separately). Authors write
+  reference entries directly in the `.typ` file as an inline dict
+  literal (reusing the same small literal parser `#metadata()` already
+  uses), and cite them from the body with `#cite(<key>)`. Citations
+  render as numbered, linked markers (`[1]`, `[2]`, ...) in order of
+  first appearance in the document -- not bibliography-listing order --
+  and a `References` section is appended after the footnotes section,
+  listing only the entries actually cited. Citing the same source more
+  than once reuses its number and link target; only the first
+  occurrence gets a backlink anchor id, so a repeatedly-cited source
+  doesn't produce duplicate HTML ids. An unresolved key (cited but with
+  no matching bibliography entry) still renders its `[n]` marker with a
+  visible fallback in the reference list, rather than crashing or
+  silently vanishing.
+
+  ```typst
+  Typst compiles quickly #cite(<haug2022>).
+
+  #bibliography((
+    haug2022: "Haug, M. (2022). Fast Typesetting with Incremental Compilation. Thesis.",
+  ))
+  ```
+
+  A real Typst file-path call, e.g. `#bibliography("refs.bib")`, is
+  still recognised and silently discarded (not a dict literal, so
+  there's nothing to render yet) rather than shown broken -- this is
+  the gap that an actual BibTeX/Hayagriva import will eventually close.
+
+### Testing
+
+- Added a `TestInlineBibliography` class covering: numbered rendering
+  instead of stripping, References section listing only cited entries,
+  citation order (not dict order) determining numbering, repeated
+  citations reusing a number without duplicate ids, graceful fallback
+  for an unresolved key, and no References section at all when nothing
+  is cited.
+- Updated the one existing test that asserted the old "strip `#cite`
+  entirely" behaviour, now that citations render.
+
+
+## [1.0.3] - 2026-07-10
 
 ### Added
 
@@ -149,7 +195,7 @@ Initial release.
   (`#set page(...)`, `#pagebreak()`, `#colbreak()`), plus constructs
   needing real evaluation we don't attempt (`#set` rules generally,
   `#import`, `#bibliography`, `#cite`), are recognised and silently
-  stripped rather than leaking as broken text -- important for `.typ`
+  stripped rather than leaking as broken text; important for `.typ`
   files that are also compiled to PDF from the same source.
 
 ### Math

@@ -77,16 +77,16 @@ pip install .[test]
 pytest tests/ -v
 ```
 
-167 tests across math, numbering, metadata/YAML parsing, and every
-markup feature (footnotes, tables/grids/stacks, all 14 layout
-functions, cross-references/outline, `#let` bindings, `#lorem()`, and
-the constructs that are recognised-and-stripped rather than shown
-broken). Several tests exist specifically to pin real bugs found during
-development in place as regressions -- e.g. a regex-backtracking issue
-that corrupted `` `#metadata()` `` inside an inline code span, and an
-unresolved `#name` reference with an underscore getting misread as
-italic shorthand by a later pass. If either of those ever starts
-failing again, something regressed.
+177 tests across math, numbering, metadata/YAML parsing, and every
+markup feature (footnotes, bibliography/citations, tables/grids/stacks,
+all 14 layout functions, cross-references/outline, `#let` bindings,
+`#lorem()`, and the constructs that are recognised-and-stripped rather
+than shown broken). Several tests exist specifically to pin real bugs
+found during development in place as regressions -- e.g. a regex-
+backtracking issue that corrupted `` `#metadata()` `` inside an inline
+code span, and an unresolved `#name` reference with an underscore
+getting misread as italic shorthand by a later pass. If either of those
+ever starts failing again, something regressed.
 
 There's also a smoke test (`test_examples_smoke.py`) that runs every
 file in `examples/` through the real `TypstReader` -- the same object
@@ -176,6 +176,8 @@ recognise (`title`, `date`, `modified`, `tags`, `category`, `slug`,
 | `#lorem(n)`                            | n words of bundled placeholder text (own data file, not Typst's exact algorithm) |
 | `#let name = "value"` / `= 123` / `= true`  | binding line stripped; later bare `#name` references substituted |
 | `text#footnote[note]`                | superscript ref + endnote list       |
+| `#cite(<key>)`                        | numbered citation link `[n]`, reused per key -- see "Bibliography and citations" |
+| `#bibliography((key: "entry", ...))`    | inline reference list rendered at the end, listing only cited keys -- see "Bibliography and citations" |
 | `#highlight[text]`                    | `<mark>`                             |
 | `#strike[text]`                        | `<s>`                                |
 | `#underline[text]`                      | `<u>`                               |
@@ -199,6 +201,7 @@ recognise (`title`, `date`, `modified`, `tags`, `category`, `slug`,
 | `#grid(columns:, [cell], ...)`                                                | CSS Grid                             |
 | `#stack(dir:, spacing:, [item], ...)`                                          | CSS flexbox                          |
 | `#h(len)` / `#v(len)`                                                            | inline / block spacers               |
+| `#line(length:, stroke:)`                                                         | `<hr>` with width/border mapped from `length`/`stroke` |
 | `#set page(...)`, `#pagebreak()`, `#colbreak()`                                    | silently stripped, no output (see "Layout" below) |
 | `// comment`                        | stripped                             |
 | `/* comment */`                     | stripped                             |
@@ -207,6 +210,80 @@ recognise (`title`, `date`, `modified`, `tags`, `category`, `slug`,
 
 Plain lines with no blank line between them are joined into one `<p>`,
 same reflow behaviour as Markdown.
+
+## Bibliography and citations
+
+Real Typst resolves `#bibliography("refs.bib")`/`@key` citations against
+an external BibTeX or Hayagriva file, using a CSL citation style to
+auto-format entries. That full pipeline isn't implemented yet -- external
+file parsing is planned as a later addition. What's supported from today is
+a self-contained stepping stone: you write your reference entries directly
+in the `.typ` file as an inline dictionary, and cite them from the body
+by key.
+
+```typst
+Typst compiles quickly #cite(<haug2022>), which stands in contrast to
+LaTeX's much longer edit-compile-preview cycle #cite(<lwn2025>). This is
+worth calling out again #cite(<haug2022>).
+
+#bibliography((
+  haug2022: "Haug, M. (2022). Fast Typesetting with Incremental Compilation. Thesis.",
+  lwn2025: "Phillips, L. (2025). Typst: a possible LaTeX replacement. LWN.net.",
+))
+```
+
+renders as:
+
+```html
+<p>Typst compiles quickly <sup id="cite-ref-1"><a href="#cite-1">[1]</a></sup>,
+which stands in contrast to LaTeX's much longer edit-compile-preview cycle
+<sup id="cite-ref-2"><a href="#cite-2">[2]</a></sup>. This is worth calling
+out again <sup><a href="#cite-1">[1]</a></sup>.</p>
+<section class="references" role="doc-bibliography">
+<h2>References</h2>
+<ol>
+<li id="cite-1">Haug, M. (2022). Fast Typesetting with Incremental Compilation. Thesis.</li>
+<li id="cite-2">Phillips, L. (2025). Typst: a possible LaTeX replacement. LWN.net.</li>
+</ol>
+</section>
+```
+
+- **Numbering follows citation order**, not the order entries happen to
+  be listed in the `#bibliography((...))` dict -- the first `#cite(...)`
+  encountered in the document becomes `[1]`, regardless of where its
+  matching entry sits in the dict.
+- **Citing the same key more than once reuses the same number** and
+  link target. Only the *first* occurrence gets a `cite-ref-N` backlink
+  anchor id, so a source cited several times doesn't produce duplicate
+  HTML ids.
+- **Only entries actually cited appear in the References list** --
+  something defined in the dict but never referenced from the body is
+  silently omitted, matching real Typst's default (non-`full`) mode.
+- **An unresolved key** (cited but with no matching dict entry) still
+  renders its `[n]` marker and gets a visible
+  `[unresolved citation key: ...]` placeholder in the reference list,
+  rather than crashing or silently vanishing -- consistent with this
+  plugin's general "a visible gap tells you something needs attention"
+  principle (see "Variable bindings" below for the same philosophy
+  applied elsewhere).
+- **No citations in the document means no References section at all**
+  -- an unused `#bibliography((...))` dict produces zero output, same
+  spirit as an unused `#let` binding.
+- **A real file-path call**, e.g. `#bibliography("refs.bib")`, is still
+  recognised and silently stripped (not a dict literal, so there's
+  nothing to render) rather than leaking broken text -- this is the gap
+  actual BibTeX/Hayagriva import will eventually close.
+- The dict-literal parsing is the exact same small literal parser
+  `#metadata()` already uses (see "Metadata" above), so entry values
+  support only literal strings, not `#let` references or nested markup.
+
+No CSS is bundled for the `.references` section, same as `.footnotes` --
+style it in your theme, e.g.:
+
+```css
+.references { font-size: 0.9em; }
+.references h2 { font-size: 1.1em; }
+```
 
 ## Math: MathML by default, LaTeX as a real fallback
 
@@ -555,7 +632,7 @@ has 27 entries, but roughly a third of them are fundamentally about
 scrolling web page with no concept of "pages" at all, so those don't
 translate. Here's the honest breakdown:
 
-**Implemented (14 functions, mapped to real CSS):**
+**Implemented (15 functions, mapped to real CSS):**
 
 | Typst | CSS mapping |
 |---|---|
@@ -573,6 +650,7 @@ translate. Here's the honest breakdown:
 | `grid(columns:, [cell], ...)` | CSS Grid, multi-line source supported same as `#table` |
 | `stack(dir:, spacing:, [item], ...)` | CSS flexbox (Typst's default direction, top-to-bottom, is respected) |
 | `h(len)` / `v(len)` | inline spacer span / block spacer div |
+| `line(length:, stroke:)` | `<hr>`, width from `length`, border from `stroke` (a Typst `width + color` value, e.g. `0.5pt + gray`) |
 
 **Silently stripped -- produce no HTML output at all**, rather than
 leaking as broken literal text: `#set page(...)`, `#pagebreak()`,
@@ -620,9 +698,11 @@ middle of an article:
   compromise. Multi-line, same as `#set page(...)`.
 - **`#import "file.typ": *`** and **`#import "@preview/pkg:<version_number>": ...`**
   -- common in real templated documents, never visible either way.
-- **`#bibliography(...)`** and **`#cite(<key>)`** -- since bibliographies
-  aren't implemented (see below), showing the raw call would be
-  strictly worse than hiding it.
+- **`#bibliography("file.bib")`** (a real file-path argument) -- external
+  bibliography-file import isn't implemented yet, so this is recognised
+  and silently discarded rather than being shown broken. This is distinct from
+  `#bibliography((key: "entry", ...))`, our own inline-dict form, which
+  *is* rendered -- see "Bibliography and citations" above.
 
 ## Variable bindings (`#let`)
 
@@ -658,25 +738,9 @@ than silently vanishing:
 The design principle here: a visible gap (`#name` showing as literal
 broken text) tells you something needs attention; a silent gap doesn't.
 Every construct in this plugin that can't be fully resolved follows
-that same rule rather than guessing or hiding the problem.
-
-## Constructs that were too narrowly matched (now widened, not stripped)
-
-A few existing patterns only matched one specific shape and fell
-through to broken text the moment real usage varied slightly. These
-now accept the realistic range of forms Typst itself allows, rather
-than being stripped:
-
-- `#quote[text]` now also accepts `#quote(attribution: [Name])[text]`
-  (or a plain string attribution), rendering a `<footer>`.
-- `#figure(...)` now works without a caption, and its body can be an
-  `image(...)` call, a nested `table(...)` call, or arbitrary bracket
-  content -- not just the one exact `image + caption` shape.
-- `#image("path")` now also accepts `width:`/`height:` args.
-- `#strong[...]` / `#emph[...]` (the function forms) now work
-  alongside the existing `*..*`/`_.._` shorthand.
-- `#raw(...)` now accepts its arguments (the code string, `lang:`,
-  `block:`) in **any order**, not just one fixed sequence.
+that same rule rather than guessing or hiding the problem -- the
+"unresolved citation key" fallback in "Bibliography and citations"
+above follows the same principle.
 
 ## Placeholder text (`#lorem()`)
 
@@ -690,18 +754,14 @@ sentence-like output) -- it's a simpler, deterministic "take the next N
 words from the pool" approach. Good enough for placeholder purposes,
 not trying to be pixel-identical to Typst's own output.
 
-## Bibliographies
-
-Not yet implemented -- calls are stripped cleanly (see above) rather
-than shown broken. See "Limitations" below for the fuller picture.
-
 ## Limitations (read this before relying on it for complex documents)
 
 - This is **not** a Typst implementation. Typst-the-language features
-  (`#let`, `#for`, `#if`, custom functions, package imports, footnotes,
-  bibliographies, cross-references, etc.) are not evaluated -- if your
-  `.typ` files use them, they'll show up as literal text in the output,
-  not be executed.
+  (`#let`, `#for`, `#if`, custom functions, package imports, external
+  BibTeX/Hayagriva bibliography files, etc.) are not evaluated -- if
+  your `.typ` files use them, they'll show up as literal text in the
+  output, or (for the specific constructs listed under "Constructs that
+  are recognised and cleanly stripped") be silently discarded instead.
 - The Typst-math-to-LaTeX conversion is best-effort. It covers the
   constructs listed above well; unusual notation (custom operators,
   exotic delimiters, stretchy accents, multi-line aligned equation
@@ -739,7 +799,7 @@ pelican-typst/
 │   ├── test_markup_layout.py
 │   ├── test_markup_refs_and_numbering.py
 │   ├── test_markup_let_and_lorem.py
-│   ├── test_markup_strip_constructs.py     # includes the two real-bug regression tests
+│   ├── test_markup_strip_constructs.py     # includes the real-bug regressions + bibliography/citation tests
 │   └── test_examples_smoke.py               # every example, through the real TypstReader
 ├── examples/
 │   ├── README.md              # index -- what each file demonstrates, suggested order
@@ -758,6 +818,7 @@ pelican-typst/
             ├── __init__.py     # plugin registration (readers_init signal)
             ├── reader.py        # TypstReader(BaseReader) -- ties it all together
             ├── metadata.py       # YAML front matter + Typst-dict metadata parsing
+            │                      (also reused to parse the inline bibliography dict)
             ├── simpleyaml.py       # small YAML-subset parser (no pyyaml dependency)
             ├── math.py               # Typst math -> MathML + LaTeX (shared AST)
             ├── markup/                # Typst body markup -> HTML (split for readability --
@@ -777,7 +838,9 @@ pelican-typst/
             │   ├── inline_processors.py           # mixin: the #name(...) substitution
             │   │                                    passes used inside _inline()
             │   └── core.py                          # TypstToHTML: state + convert() +
-            │                                          _inline(), combines both mixins
+            │                                          _inline(), combines both mixins --
+            │                                          also owns bibliography/citation state
+            │                                          and the References section rendering
             ├── static/
             │   └── mathml-fallback.js
             └── data/
@@ -798,6 +861,11 @@ look first, in order of how often you'll actually need each one:
 - **Heading numbers, labels, or `#outline()` are wrong** ->
   `block_renderers.py` (`_collect_headings`, `_render_outline`) plus
   `numbering.py` for the actual number-formatting algorithm.
+- **Citation numbering or the References list looks wrong** ->
+  `core.py` -- the `#bibliography(...)` block handling and `#cite(...)`
+  substitution (`cite_sub`) both live directly in `core.py`, not in a
+  separate mixin, since they need to share state (`citation_order`,
+  `citation_index`, `bibliography`) across the whole document.
 - **Something that should be silently stripped (e.g. `#set page(...)`)
   is leaking as visible text** -> check `patterns.py` for whether a
   matching regex exists yet, then `core.py`'s `convert()` main loop for
@@ -805,4 +873,7 @@ look first, in order of how often you'll actually need each one:
 - **The overall pipeline order is suspect** (e.g. one substitution
   seems to interfere with another) -> `core.py`'s `_inline()` is the
   single place that lists every pass in order, with comments explaining
-  why each one is positioned where it is.
+  why each one is positioned where it is. Verbatim content (code spans,
+  `#raw()`) is deliberately protected *first*, before anything else
+  gets a chance to misinterpret Typst-like syntax sitting inertly
+  inside it.
