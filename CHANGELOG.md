@@ -4,6 +4,63 @@ All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
 
+## [1.0.5] - 2026-07-13
+
+### Fixed
+
+- **Bibliography entries (`#bibliography((key: "entry", ...))`) weren't
+  getting any inline processing at all.** Entry values were only
+  HTML-escaped as literal text, so markup written inside an entry --
+  `_italic_`, `*bold*`, `#link(...)[...]`, etc. -- showed up as literal,
+  unprocessed punctuation instead of being rendered, unlike footnote
+  content, which already got full inline processing. Fixed by running
+  each entry value through the same `_inline()` pass footnotes use, so
+  a reference like:
+  ```typst
+  #bibliography((
+    typst_oss: "Typst.app. (n.d.). Open Source at Typst. _Install the compiler._ Retrieved from #link(\"https://typst.app/open-source/#download\")[the download page].",
+  ))
+  ```
+  now correctly renders the italics and the link instead of showing
+  the raw Typst source.
+
+- **`#link("url")[text]` broke whenever the URL itself contained a `#`**
+  (i.e. any URL with a fragment identifier, such as
+  `https://example.com/page#section`) -- not specific to bibliography
+  entries, this affected `#link(...)` anywhere in a document. The `#`
+  inside the quoted URL was being caught by the bare `#name`-reference
+  scanner before `#link(...)` itself got processed, corrupting the URL
+  and leaving an unresolved stash placeholder (a literal null byte) in
+  the output. Surfaced directly by fixing the bibliography issue above,
+  since a real reference URL is exactly the kind of thing likely to
+  contain a `#section`/`#download`-style fragment.
+
+  Fixed by moving `#link(...)` handling to the correct point in the
+  `_inline()` pipeline: after the layout-wrap/bracket-function/text-
+  style passes (so a `#link(...)` nested inside e.g. `#footnote[...]`
+  or `#highlight[...]` still resolves correctly within that construct's
+  own recursive `_inline()` call, rather than being eagerly and
+  incorrectly consumed by the outer call first), but before the bare
+  `#name`-reference scanner (so a `#` inside the URL can no longer be
+  misread as an unrelated reference). Link text is now also explicitly
+  recursively processed via `_inline()` rather than relying on it
+  having incidentally already been transformed by whichever passes
+  happened to run over it earlier -- the same "flat-scan ordering"
+  fragility that caused the `1.0.2` layout-wrap crash, here for a
+  different construct.
+
+### Testing
+
+- Verified: bibliography entries with italics/bold/links now render
+  correctly; `#link(...)` with a `#` in the URL no longer corrupts;
+  `#link(...)` nested inside `#footnote[...]` still resolves correctly
+  (this exact case is what the fix's own reordering had to keep
+  working, per the existing `test_content_gets_full_inline_processing`
+  footnote test).
+- Full suite (177 tests) and all 9 bundled examples re-verified with no
+  leftover stash placeholders.
+
+
 ## [1.0.4] - 2026-07-12
 
 ### Added

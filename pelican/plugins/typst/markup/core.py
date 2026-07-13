@@ -1,7 +1,7 @@
 """
-TypstToHTML: the main entry point, combining the two mixins
-(BlockRenderersMixin, InlineProcessorsMixin) with the document-level
-state and the two central methods:
+TypstToHTML: the main entry point, combining the mixins
+(BlockRenderersMixin, InlineProcessorsMixin, BibliographyMixin) with
+the document-level state and the two central methods:
 
 - convert(text): the line-based main loop that walks the document
   block by block.
@@ -17,8 +17,8 @@ import html
 import re
 
 from ..math import convert_math
-from ..metadata import _parse_value
 from .block_renderers import BlockRenderersMixin
+from .bibliography import BibliographyMixin
 from .css_utils import _parse_size, _parse_stroke
 from .inline_processors import InlineProcessorsMixin
 from .lorem import _generate_lorem
@@ -71,7 +71,7 @@ from .text_utils import (
 )
 
 
-class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
+class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin, BibliographyMixin):
     def __init__(self):
         self.footnotes = []
         self.footnote_counter = 0
@@ -152,21 +152,7 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
                 args, consumed = self._scan_multiline_paren_call(
                     lines, i, "#bibliography("
                 )
-                try:
-                    data, _ = _parse_value(args, 0)
-                    if isinstance(data, dict):
-                        self.bibliography.update(
-                            {
-                                str(k): html.escape(str(v), quote=False)
-                                for k, v in data.items()
-                            }
-                        )
-                except (ValueError, IndexError):
-                    # Not an inline dict (e.g. a real Typst file-path
-                    # call like #bibliography("refs.bib")) -- silently
-                    # consumed either way, same as before this supported
-                    # inline entries at all.
-                    pass
+                self._parse_bibliography_args(args)
                 i += consumed
                 continue
 
@@ -391,19 +377,7 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
                 f"<ol>\n{items}\n</ol>\n</section>"
             )
 
-        if self.citation_order:
-            ref_items = []
-            for key in self.citation_order:
-                num = self.citation_index[key]
-                entry = self.bibliography.get(
-                    key, f"[unresolved citation key: {html.escape(key)}]"
-                )
-                ref_items.append(f'<li id="cite-{num}">{entry}</li>')
-            body += (
-                '\n<section class="references" role="doc-bibliography">\n'
-                "<h2>References</h2>\n"
-                f"<ol>\n{chr(10).join(ref_items)}\n</ol>\n</section>"
-            )
+        body += self._render_references_section()
 
         return body
 
@@ -431,6 +405,26 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
         text = self._process_text_style(text, stash)
         text = self._process_math_equation(text, stash)
 
+        # #link("url")[text]'s URL argument is opaque data, same as a
+        # code span -- it must never be re-scanned for Typst syntax (a
+        # URL fragment like "...#download" would otherwise get misread
+        # as a bare #hash-reference by _HASH_REF_RE below, corrupting
+        # the URL). This has to run *after* the layout-wrap/bracket-
+        # function/text-style passes above, though, not before them --
+        # those recursively call _inline() on their own nested content
+        # (e.g. #footnote[...See #link(...)[...]...]), and each such
+        # recursive call needs to see its own #link(...) call intact so
+        # it can resolve it within its own self-contained placeholder
+        # list, rather than having the outer call consume it first and
+        # leave an unresolvable stash marker behind for the inner call
+        # to choke on.
+        def link_sub(m):
+            url = html.escape(m.group(1))
+            link_text = self._inline(m.group(2))
+            return stash(f'<a href="{url}">{link_text}</a>')
+
+        text = re.sub(r'#link\("([^"]+)"\)\[([^\]]*)\]', link_sub, text)
+
         def numbering_sub(m):
             pattern = m.group(1)
             numbers = [int(x.strip()) for x in m.group(2).split(",") if x.strip()]
@@ -445,24 +439,7 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
 
         text = _LOREM_RE.sub(lorem_sub, text)
 
-        def cite_sub(m):
-            key = m.group(1)
-            if key not in self.citation_index:
-                self.citation_index[key] = len(self.citation_order) + 1
-                self.citation_order.append(key)
-            num = self.citation_index[key]
-            if key not in self.citation_first_seen:
-                self.citation_first_seen.add(key)
-                id_attr = f' id="cite-ref-{num}"'
-            else:
-                # Same source cited again elsewhere -- still gets the
-                # same [num] link, but only the first occurrence owns
-                # the backlink anchor id, so a source cited more than
-                # once doesn't produce duplicate HTML ids.
-                id_attr = ""
-            return stash(f'<sup{id_attr}><a href="#cite-{num}">[{num}]</a></sup>')
-
-        text = _CITE_INLINE_RE.sub(cite_sub, text)
+        text = _CITE_INLINE_RE.sub(lambda m: self._cite_sub(m, stash), text)
 
         def hash_ref_sub(m):
             name = m.group(1)
@@ -513,11 +490,6 @@ class TypstToHTML(BlockRenderersMixin, InlineProcessorsMixin):
         text = re.sub(r"\$([^$]+)\$", math_sub, text)
 
         text = html.escape(text, quote=False)
-
-        def link_sub(m):
-            return stash(f'<a href="{html.escape(m.group(1))}">{m.group(2)}</a>')
-
-        text = re.sub(r'#link\("([^"]+)"\)\[([^\]]*)\]', link_sub, text)
 
         def at_label_sub(m):
             resolved = self._resolve_ref(m.group(1))
